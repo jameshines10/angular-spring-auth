@@ -1,118 +1,98 @@
 'use strict';
 
 
-(function () {
+// Declare app level module which depends on filters, and services
+var app = angular.module('bgc-profile', []).
+    config(['$routeProvider', function ($routeProvider) {
+    $routeProvider.when('/view/:memberId', {templateUrl:'lib/profile/profile.html', controller:ProfileCtrl});
+    $routeProvider.otherwise({redirectTo:'/view/1'});
+}]);
 
-	function routeProvider( $routeProvider ) {
-		$routeProvider.when( '/view1', {
-			templateUrl: 'partials/partial1.html',
-			controller: MyCtrl1
-		} );
-		$routeProvider.when( '/view2', {
-			templateUrl: 'partials/partial2.html',
-			controller: MyCtrl2
-		} );
-		$routeProvider.otherwise( {redirectTo: '/view1'} );
-	}
+app.directive('emailValidator', ['$http', function($http){
+    return {
+        require: 'ngModel',
+        link: function(scope, elm, attrs, ctrl){
 
+            ctrl.$parsers.unshift(function(viewValue){
+                $http.get('api/profiles/asyncEmail/' + viewValue).success(function(data){
+                    console.log(data);
+                    if(data === 'true'){
+                        ctrl.$setValidity('emailValidator', true);
+                        return viewValue;
+                    }else{
+                        ctrl.$setValidity('emailValidator', false);
+                        return undefined;
+                    }
+                }).error(function(data, status){
+                        console.log(status);
+                    });
+            });
+        }
+    }
+}]);
 
-	var authenticationInterceptor = ['$rootScope', '$q', '$log', function ( $scope, $q, $log ) {
-		function success( response ) {
-			$log.info( 'Successful response: ' + JSON.stringify( response ) );
-			return response;
-		}
+app.directive('fileUpload', function(){
+    return{
+        link: function(scope, elm, attrs){
+            var opts = {};
+            var config = {
+                //runtimes : 'gears,html5,flash,silverlight,browserplus',
+                runtimes: 'html5',
+                browse_button : 'pickfiles',
+                container: 'container',
+                max_file_size : '10mb',
+                url : '/gc/api/profiles/pics/1',
+                resize : {width : 320, height : 240, quality : 90},
+                flash_swf_url : '../js/plupload.flash.swf',
+                silverlight_xap_url : '../js/plupload.silverlight.xap',
+                filters : [
+                    {title : "Image files", extensions : "jpg,gif,png"},
+                    {title : "Zip files", extensions : "zip"}
+                ]
+            };
 
-		function error( response ) {
-			var status = response.status;
+            if(attrs.fileUpload){
+                opts = scope.$eval(attrs.fileUpload);
+                if(opts.dropTarget){
+                    config.drop_element = opts.dropTarget;
+                }
+            }
 
-			$log.error( 'Error, status: ' + status + ', response: ' + JSON.stringify( response ) );
-			if ( status === 401 ) {
-				var deferred = $q.defer();
-				var req = {
-					config: response.config,
-					deferred: deferred
-				};
-				$scope.requests401.push( req );
-				$scope.$broadcast( 'event:loginRequired' );
-				return deferred.promise;
-			}
+            function $(id) {
+                return document.getElementById(id);
+            }
 
-			return $q.reject( response );
-		}
+            var uploader = new plupload.Uploader(config);
 
-		return function ( promise ) {
-			return promise.then( success, error );
-		}
-	}];
+            /*uploader.bind('Init', function(up, params) {
+             $('filelist').innerHTML = "<div>Current runtime: " + params.runtime + "</div>";
+             });*/
 
-	function httpProvider( $httpProvider ) {
-		$httpProvider.responseInterceptors.push( authenticationInterceptor );
-	}
+            uploader.bind('FilesAdded', function(up, files) {
+                for (var i in files) {
+                    $('filelist').innerHTML += '<div id="' + files[i].id + '">' + files[i].name + ' (' + plupload.formatSize(files[i].size) + ') <b></b></div>';
+                }
 
-	function locationProvider( $locationProvider ) {
-//		$locationProvider.html5Mode( true );
-	}
+                setTimeout(function(){
+                    uploader.start();
+                }, 500);
+            });
 
+            uploader.bind('UploadProgress', function(up, file) {
+                $(file.id).getElementsByTagName('b')[0].innerHTML = '<span>' + file.percent + "%</span>";
+            });
 
-	function run( $scope, $http, $log ) {
-		// Holds any all requests that fail because of an authentication error.
-		$scope.requests401 = [];
+            uploader.bind('FileUploaded', function(uploader, file, response){
+                console.log(uploader, file, response);
+                $(config.drop_element).src = response.response;
+            })
 
-		$scope.$on( 'event:loginConfirmed', function () {
+            /*$('uploadfiles').onclick = function() {
+             uploader.start();
+             return false;
+             };*/
 
-			function retry( req ) {
-				$http( req.config ).then( function ( response ) {
-					req.deferred.resolve( response );
-				} );
-			}
-
-			var requests = $scope.requests401;
-			for ( var i = 0, c = requests.length; i < c; i++ ) {
-				retry( requests[i] );
-			}
-		} );
-
-		$scope.$on( 'event:loginRequest', function ( event, username, password ) {
-			var payload = $.param( {
-				j_username: username,
-				j_password: password
-			} );
-			var config = {
-				headers: {
-					'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
-				}
-			};
-
-			var success = function ( data ) {
-				if ( data === 'AUTH_SUCCESS' ) {
-					$scope.$broadcast( 'event:loginConfirmed' );
-				} else {
-					$scope.$broadcast( 'event:loginFailed' );
-				}
-			};
-
-			$log.info( ' Submitting form to Spring', JSON.stringify( payload ), username, password );
-			$http.post( 'j_spring_security_check', payload, config )
-					.success( success );
-		} );
-
-		$scope.$on( 'event:logoutRequest', function () {
-			function success() {
-				$scope.$broadcast( 'event:logoutConfirmed' );
-			}
-
-			$http.put( 'j_spring_security_logout', {} )
-					.success( success );
-		} );
-	}
-
-	// Declare app level module which depends on filters, and services
-	angular.module( 'myApp', ['myApp.filters', 'myApp.services', 'myApp.directives'] )
-			.config( ['$routeProvider', routeProvider] )
-			.config( ['$httpProvider', httpProvider] )
-			.config( ['$locationProvider', locationProvider] )
-			.run( ['$rootScope', '$http', '$log', run] );
-
-
-})();
-
+            uploader.init();
+        }
+    }
+});
