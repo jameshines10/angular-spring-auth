@@ -19,7 +19,7 @@
         <stick-version>0.1.0-alpha-7</stick-version>
         <trimpath-version>1.0.7</trimpath-version>
         <spring-version>3.1.2.RELEASE</spring-version>
-        <springsec-version>3.1.1.RELEASE</springsec-version>
+        <springsec-version>5.2.10.RELEASE</springsec-version>
     </properties>
 
     <prerequisites>
